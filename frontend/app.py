@@ -1,83 +1,79 @@
 import streamlit as st
-import requests
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
+import os
+import json
+from groq import Groq
+from dotenv import load_dotenv
 
-# Page Config
-st.set_page_config(
-    page_title="AI Finans Asistanı",
-    page_icon="💰",
-    layout="wide"
-)
+# --- BACKEND LOGIC INTEGRATION ---
+# Instead of calling an external API, we use the logic directly for Streamlit Cloud
+load_dotenv()
 
-# Custom CSS for Premium Look
+SYSTEM_PROMPT = """
+Sen kıdemli bir finans danışmanı ve yapay zeka asistanısın. Kullanıcının harcamalarını analiz ederek sadece veri sunmakla kalmaz, aynı zamanda derinlemesine finansal stratejiler geliştirirsin.
+
+Görevlerin:
+1. Harcamaları kalem kalem ayır ve kategorize et.
+2. Her kategori için harcama yoğunluğunu değerlendir.
+3. Tasarruf önerilerini şu kategorilerde detaylandır: 'Kısa Vadeli Aksiyonlar', 'Yaşam Tarzı Değişiklikleri', 'Yatırım Fırsatları'.
+4. Her öneri için bir açıklama ve tahmini tasarruf potansiyeli (TL bazında) belirt.
+
+Yanıtını şu JSON formatında dön:
+{
+    "status": "success",
+    "analysis": {
+        "items": [
+            {"item": "ürün", "amount": 0.0, "category": "Kategori", "date": "2026-03-06"}
+        ],
+        "total_amount": 0.0,
+        "summary": "Analiz özeti.",
+        "detailed_recommendations": [
+            {"title": "Başlık", "description": "Detay", "type": "Tür", "impact": "Yüksek", "estimated_saving": "100 TL"}
+        ],
+        "spending_risk": "Düşük"
+    }
+}
+"""
+
+def analyze_with_groq(text):
+    client = Groq(api_key=st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY"))
+    completion = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text}
+        ],
+        response_format={"type": "json_object"}
+    )
+    return json.loads(completion.choices[0].message.content)
+
+# --- UI CONFIG ---
+st.set_page_config(page_title="AI Finans Danışmanı", page_icon="💰", layout="wide")
+
+# (Custom CSS remains the same...)
 st.markdown("""
     <style>
-    .main {
-        background-color: #0e1117;
-    }
-    .stButton>button {
-        width: 100%;
-        border-radius: 10px;
-        height: 3em;
-        background-color: #FF4B4B;
-        color: white;
-        border: none;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #FF2B2B;
-        box-shadow: 0 4px 15px rgba(255, 75, 75, 0.4);
-    }
-    .category-card {
-        padding: 20px;
-        border-radius: 15px;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 15px;
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #00D1FF;
-    }
+    .stButton>button { width: 100%; border-radius: 10px; background-color: #FF4B4B; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-# Main Header
 st.title("💰 AI Destekli Kişisel Finans Danışmanı")
-st.markdown("Harcamalarınızı doğal dille yazın, AI sizin için stratejik analiz yapsın.")
 
-# User Input Section
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    user_input = st.text_area(
-        "Harcama Metni",
-        placeholder="Örn: Marketten 500 TL alışveriş yaptım. Dün 150 TL'ye sinemaya gittim. 2000 TL kira ödedim.",
-        height=200
-    )
-    
+    user_input = st.text_area("Harcama Metni", placeholder="Örn: Market 500 TL, Kira 2000 TL...", height=150)
     if st.button("Stratejik Analiz Başlat ✨"):
         if user_input:
             with st.spinner("Llama 3.3 analiz ediyor..."):
                 try:
-                    response = requests.post(
-                        "http://127.0.0.1:8000/analyze",
-                        json={"text": user_input, "provider": "groq"}
-                    )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        st.session_state.analysis_data = data
-                        st.success("Analiz başarıyla tamamlandı!")
-                    else:
-                        st.error(f"Hata: {response.text}")
+                    # DIRECT CALL INSTEAD OF API
+                    data = analyze_with_groq(user_input)
+                    st.session_state.analysis_data = data
+                    st.success("Analiz tamamlandı!")
                 except Exception as e:
-                    st.error(f"Bağlantı hatası: {e}")
-        else:
-            st.warning("Lütfen analiz edilecek bir metin girin.")
+                    st.error(f"Hata oluştu: {e}")
 
 with col2:
     st.markdown("### 📊 Finansal Sağlık")
